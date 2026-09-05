@@ -1,65 +1,65 @@
-// Exact colors from ~/.config/opencode/themes/kaku.json (One Dark).
-// Ponytail: this is the user's active opencode theme (see tui.json -> "theme":"kaku").
-// Keep these hex values in sync with that file — they are the source of truth.
-// If you change the palette there, update the `palette` module below only.
+// Exact colors from kaku-app's `kaku/src/kaku_theme.rs` (dark_palette).
+// ponytail: this is the real kaku palette. The `kaku.json` in
+// ~/.config/opencode/themes/ uses One Dark instead and is a separate
+// opencode-side theme — not the same thing as kaku's actual terminal
+// colors. We match the kaku-app side because that's what the
+// user sees in their reference screenshot.
+//
+//            kaku.rs      our theme role
+//  primary   #8E6AD9  ->  USER (bold + purple — user prompt label)
+//  secondary #58D8AD  ->  SUCCESS (teal — "ok" state)
+//  accent    #DAAE76  ->  ACCENT (warm tan — cursor, chevrons)
+//  error     #D85D5D  ->  ERROR
+//  text      #D5D4D6  ->  FG (body)
+//  muted     #6D6D6D  ->  FG_MUTE, FG_DIM
+//  bg        #15141B  ->  BG
 
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Padding};
 
-/// Raw `defs` block from kaku.json. Named 1:1 with that file.
+/// Raw kaku palette. Names mirror `dark_palette()` in kaku_theme.rs.
 pub mod palette {
     use ratatui::style::Color;
 
-    // Backgrounds
-    pub const BG: Color = Color::Rgb(0x1e, 0x1e, 0x1e);       // #1e1e1e
-    pub const BG_LIFT: Color = Color::Rgb(0x2d, 0x2d, 0x2d);   // #2d2d2d
-    pub const BG_EDGE: Color = Color::Rgb(0x33, 0x33, 0x33);   // #333333
-    pub const BG_SUBTLE: Color = Color::Rgb(0x2a, 0x2a, 0x2a); // #2a2a2a
-
-    // Foregrounds
-    pub const FG: Color = Color::Rgb(0xd4, 0xd4, 0xd4);       // #d4d4d4
-    pub const FG_BRIGHT: Color = Color::Rgb(0xe8, 0xe8, 0xe8); // #e8e8e8
-    pub const FG_MUTED: Color = Color::Rgb(0x6e, 0x6e, 0x6e);  // #6e6e6e
-    pub const FG_FAINT: Color = Color::Rgb(0x5c, 0x63, 0x70);  // #5c6370
-
-    // Accents
-    pub const BLUE: Color = Color::Rgb(0x61, 0xaf, 0xef);     // #61afef
-    pub const GREEN: Color = Color::Rgb(0x98, 0xc3, 0x79);    // #98c379
-    pub const YELLOW: Color = Color::Rgb(0xe5, 0xc0, 0x7b);   // #e5c07b
-    pub const ORANGE: Color = Color::Rgb(0xd1, 0x9a, 0x66);   // #d19a66
-    pub const RED: Color = Color::Rgb(0xe0, 0x6c, 0x75);      // #e06c75
-    pub const PURPLE: Color = Color::Rgb(0xc6, 0x78, 0xdd);   // #c678dd
-    pub const CYAN: Color = Color::Rgb(0x56, 0xb6, 0xc2);     // #56b6c2
-    pub const GREY: Color = Color::Rgb(0xab, 0xb2, 0xbf);     // #abb2bf
+    pub const PRIMARY: Color = Color::Rgb(0x8e, 0x6a, 0xd9); // #8E6AD9 — purple
+    pub const SECONDARY: Color = Color::Rgb(0x58, 0xd8, 0xad); // #58D8AD — teal
+    pub const ACCENT: Color = Color::Rgb(0xda, 0xae, 0x76); // #DAAE76 — warm tan
+    pub const ERROR: Color = Color::Rgb(0xd8, 0x5d, 0x5d); // #D85D5D — red
+    pub const TEXT: Color = Color::Rgb(0xd5, 0xd4, 0xd6); // #D5D4D6 — off-white
+    pub const MUTED: Color = Color::Rgb(0x6d, 0x6d, 0x6d); // #6D6D6D — gray
+    pub const BG: Color = Color::Rgb(0x15, 0x14, 0x1b); // #15141B — near-black purple
 }
 
-// Semantic roles — mapped from kaku.json's `theme` section.
-// Kaku sets primary/secondary/accent all to blue, so blue carries the accent;
-// user messages take blue, assistant messages take the bright foreground so
-// the two stay legible against each other.
+// ── Semantic roles ──
+// Maps semantic intent to kaku palette tokens. The top tag and dim hints
+// use `palette::MUTED` for the secondary text; the accent (chevron, cursor)
+// uses the warm tan instead of the purple so the user prompt label and
+// the prompt glyph read distinctly.
 
 pub const BG: Color = palette::BG;
-pub const FG: Color = palette::FG;
-pub const FG_DIM: Color = palette::BG_EDGE;       // theme.border
-pub const FG_MUTE: Color = palette::FG_MUTED;     // theme.textMuted
-pub const FG_FAINT: Color = palette::FG_FAINT;    // theme.blockQuote / faint
-pub const FG_BRIGHT: Color = palette::FG_BRIGHT;  // theme.markdownHeading
+pub const FG: Color = palette::TEXT;
+pub const FG_DIM: Color = palette::MUTED;
+pub const FG_MUTE: Color = palette::MUTED;
+pub const FG_FAINT: Color = palette::MUTED;
+pub const FG_BRIGHT: Color = palette::TEXT;
 
-pub const ACCENT: Color = palette::BLUE;          // theme.accent
-pub const USER: Color = palette::BLUE;            // theme.primary
-pub const ASSIST: Color = palette::FG_BRIGHT;     // theme.markdownHeading
+pub const ACCENT: Color = palette::ACCENT;
+pub const USER: Color = palette::PRIMARY;
+pub const ASSIST: Color = palette::TEXT;
 
-pub const ERROR: Color = palette::RED;            // theme.error
-pub const WARNING: Color = palette::ORANGE;       // theme.warning
-pub const SUCCESS: Color = palette::GREEN;        // theme.success
-pub const INFO: Color = palette::BLUE;            // theme.info
+pub const ERROR: Color = palette::ERROR;
+pub const WARNING: Color = palette::ACCENT;
+pub const SUCCESS: Color = palette::SECONDARY;
+pub const INFO: Color = palette::PRIMARY;
 
-// Spacing — "feels like kaku" = 1 cell padding, never more.
+// Spacing — kaku is low-density: 1 cell margin, never more.
 pub const PADDING_H: u16 = 1;
 pub const PADDING_V: u16 = 1;
 
 /// Rounded-bordered block with a dim border + plain title.
-/// ponytail: this is the only block style. If we need a second one, lift it.
+/// ponytail: still unused in the kaku redesign (no borders), but kept
+/// for tests and any future use.
+#[allow(dead_code)]
 pub fn block(title: &str) -> Block<'_> {
     Block::default()
         .borders(Borders::ALL)
@@ -70,6 +70,7 @@ pub fn block(title: &str) -> Block<'_> {
 }
 
 /// Flat, padded interior for content blocks (no border).
+#[allow(dead_code)]
 pub fn block_flat() -> Block<'static> {
     Block::default()
         .borders(Borders::NONE)
