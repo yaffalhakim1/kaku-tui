@@ -1,0 +1,16 @@
+# Build artifacts
+/target/
+
+# Lockfile: pinning committed for binary apps is the modern recommendation
+# (https://blog.rust-lang.org/2024/04/09/Rust-1.77.0.html#cargo-locks-in-binary-projects)
+# but for a fresh repo, ignoring it avoids committing the dep resolution.
+# Flip this commit-include when you start collaborating with another dev.
+/Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
