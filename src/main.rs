@@ -12,6 +12,7 @@
 
 mod app;
 mod client;
+mod commands;
 mod theme;
 mod ui;
 // `mod` declarations shared with `lib.rs` — fine because cargo treats them
@@ -351,11 +352,33 @@ async fn handle_key(
         KeyCode::Enter => {
             let text: String = ta.lines().join("\n");
             let text = text.trim().to_string();
-            if text.is_empty() || matches!(app.status, Status::Busy) {
+            if text.is_empty() {
+                return Ok(());
+            }
+            // Commands are local-only and run even while streaming — a
+            // user-initiated /quit or /clear should never be blocked.
+            let is_command = text.starts_with('/') || text.starts_with(':');
+            if !is_command && matches!(app.status, Status::Busy) {
                 return Ok(());
             }
             ta.select_all();
             ta.cut();
+
+            // ── Command path ──
+            if is_command {
+                // Echo the typed command as a User line so it appears in
+                // the chat history (consistent with regular prompts).
+                app.messages
+                    .push(DisplayMessage { role: Role::User, text: text.clone() });
+                let cmd = commands::parse(&text);
+                let outcome = commands::execute(cmd, app, client).await;
+                if outcome.is_quit() {
+                    std::process::exit(0);
+                }
+                return Ok(());
+            }
+
+            // ── Regular prompt path ──
             // User message → render immediately.
             app.messages
                 .push(DisplayMessage { role: Role::User, text: text.clone() });

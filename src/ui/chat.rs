@@ -49,6 +49,10 @@ pub fn render_messages(f: &mut Frame<'_>, area: Rect, app: &AppState) {
                     Span::raw(&m.text),
                 ])),
                 Role::Assistant => ListItem::new(Line::from(Span::raw(&m.text))),
+                Role::System => ListItem::new(Line::from(Span::styled(
+                    &m.text,
+                    Style::default().fg(theme::FG_MUTE),
+                ))),
             }
         })
         .collect();

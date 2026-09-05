@@ -16,6 +16,9 @@ pub enum Status {
 pub enum Role {
     User,
     Assistant,
+    /// Informational output from `/`-prefixed commands. Not from the model.
+    /// Rendered with muted color, no chevron.
+    System,
 }
 
 #[derive(Debug, Clone)]
