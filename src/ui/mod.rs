@@ -75,10 +75,12 @@ fn render_top_tag(f: &mut Frame<'_>, area: Rect, app: &AppState) {
     ]);
     Paragraph::new(left).render(cols[0], f.buffer_mut());
 
-    let right = Paragraph::new(Line::from(Span::styled(
-        "esc:quit  ⌘k palette  ",
-        Style::default().fg(theme::FG_MUTE),
-    )))
+    let right = Paragraph::new(Line::from(vec![
+        Span::styled("esc", Style::default().fg(theme::PRIMARY)),
+        Span::styled(" quit  ", Style::default().fg(theme::FG_MUTE)),
+        Span::styled("/", Style::default().fg(theme::PRIMARY)),
+        Span::styled(" cmds", Style::default().fg(theme::FG_MUTE)),
+    ]))
     .alignment(ratatui::layout::Alignment::Right);
     right.render(cols[1], f.buffer_mut());
 }

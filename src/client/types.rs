@@ -107,3 +107,33 @@ pub struct TextPart {
     #[allow(dead_code)]
     pub ignored: Option<bool>,
 }
+
+// ── Reference types (lightweight — used only for builder ergonomics) ──
+
+/// (providerID, modelID) pair sent on per-prompt `model` overrides.
+/// Opencode's body shape:
+///   { "model": { "providerID": "anthropic", "modelID": "claude-opus-4-5" } }
+#[derive(Debug, Clone)]
+pub struct ModelRef {
+    pub provider_id: String,
+    pub model_id: String,
+}
+
+impl ModelRef {
+    pub fn new(provider_id: impl Into<String>, model_id: impl Into<String>) -> Self {
+        Self {
+            provider_id: provider_id.into(),
+            model_id: model_id.into(),
+        }
+    }
+    /// Parse `provider/model` shorthand. Returns None when the slash is
+    /// missing — caller decides whether to error.
+    pub fn parse(s: &str) -> Option<Self> {
+        let (p, m) = s.split_once('/')?;
+        Some(Self::new(p.trim(), m.trim()))
+    }
+    /// Render back to `provider/model` for display.
+    pub fn display(&self) -> String {
+        format!("{}/{}", self.provider_id, self.model_id)
+    }
+}

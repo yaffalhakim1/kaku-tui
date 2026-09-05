@@ -51,12 +51,42 @@ async fn main() -> anyhow::Result<()> {
     let outcome = commands::execute(commands::Command::Quit, &mut app, &client).await;
     check(outcome == commands::Outcome::Quit, "/quit returns Quit");
 
-    // execute: Model with no default_model set pushes a System message.
-    commands::execute(commands::Command::Model, &mut app, &client).await;
+    // execute: Model with no arg shows current + default.
+    commands::execute(commands::Command::Model(None), &mut app, &client).await;
     let last = app.messages.last().unwrap();
     check(
-        matches!(last.role, Role::System) && last.text.starts_with("model: "),
-        "/model output shape",
+        matches!(last.role, Role::System) && last.text.starts_with("model:"),
+        "/model show output shape",
+    );
+
+    // execute: Model with valid spec sets override + pushes confirmation.
+    commands::execute(
+        commands::Command::Model(Some("anthropic/claude-opus-4-5".into())),
+        &mut app,
+        &client,
+    )
+    .await;
+    check(
+        app.current_model_override.as_deref() == Some("anthropic/claude-opus-4-5"),
+        "/model sets override",
+    );
+    let last = app.messages.last().unwrap();
+    check(
+        matches!(last.role, Role::System) && last.text.contains("→ anthropic/claude-opus-4-5"),
+        "/model confirmation message",
+    );
+
+    // execute: Model with bad spec (no slash) keeps override unchanged.
+    let prev_override = app.current_model_override.clone();
+    commands::execute(
+        commands::Command::Model(Some("nope-no-slash".into())),
+        &mut app,
+        &client,
+    )
+    .await;
+    check(
+        app.current_model_override == prev_override,
+        "/model bad spec doesn't change override",
     );
 
     // execute: Unknown pushes an error message.

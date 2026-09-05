@@ -40,6 +40,9 @@ pub struct AppState {
     /// Default model from `/config/providers`, formatted `providerID/modelID`.
     /// Shown in the top-left tag alongside the session title.
     pub default_model: Option<String>,
+    /// User's `/model <provider/id>` override. None means "use default".
+    /// Sent on every prompt body; cleared on `/reset` or session change.
+    pub current_model_override: Option<String>,
     pub status: Status,
     pub messages: Vec<DisplayMessage>,
     pub input: String,
@@ -63,6 +66,7 @@ impl AppState {
         Self {
             session: None,
             default_model: None,
+            current_model_override: None,
             status: Status::Idle,
             messages: Vec::new(),
             input: String::new(),

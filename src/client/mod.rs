@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::{Client, RequestBuilder, Url};
 
-pub use types::{Health, PromptResponse, Session};
+pub use types::{Health, ModelRef, PromptResponse, Session};
 
 #[derive(Debug, Clone)]
 pub struct OpencodeClient {
@@ -75,21 +75,34 @@ impl OpencodeClient {
         Ok(s)
     }
 
-    /// POST /session/:id/prompt_async — fire-and-forget, returns 204.
-    /// The actual response streams back via SSE on /event.
-    ///
-    /// Body shape (per opencode server contract):
-    /// {
-    ///   "parts": [{ "type": "text", "text": "..." }],
-    ///   // model is optional — server picks its default if omitted.
-    /// }
-    ///
-    /// ponytail: no `model` field per the plan. Server decides.
-    pub async fn send_prompt(&self, session_id: &str, text: &str) -> Result<()> {
+/// POST /session/:id/prompt_async — fire-and-forget, returns 204.
+/// The actual response streams back via SSE on /event.
+///
+/// Body shape (per opencode server contract):
+/// {
+///   "parts": [{ "type": "text", "text": "..." }],
+///   "model": { "providerID": "...", "modelID": "..." }  // optional per-prompt override
+/// }
+///
+/// ponytail: model override is optional. If absent, the session's
+/// configured default is used. We persist the user's `/model` choice
+/// in AppState and pass it through on every send.
+pub async fn send_prompt(
+        &self,
+        session_id: &str,
+        text: &str,
+        model: Option<ModelRef>,
+    ) -> Result<()> {
         let url = self.base.join(&format!("/session/{session_id}/prompt_async"))?;
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "parts": [{ "type": "text", "text": text }],
         });
+        if let Some(m) = model {
+            body["model"] = serde_json::json!({
+                "providerID": m.provider_id,
+                "modelID": m.model_id,
+            });
+        }
         let resp = self
             .http
             .post(url)

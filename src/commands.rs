@@ -21,7 +21,8 @@ pub enum Command {
     Quit,
     New,
     Sessions,
-    Model,
+    /// `/model` with no arg → show current; `/model <provider/id>` → switch.
+    Model(Option<String>),
     Unknown(String),
 }
 
@@ -58,14 +59,22 @@ pub fn parse(text: &str) -> Command {
         .unwrap_or(trimmed);
     let mut parts = rest.splitn(2, char::is_whitespace);
     let name = parts.next().unwrap_or("").to_lowercase();
-    let _arg = parts.next().unwrap_or("").trim().to_string();
+    let arg = parts.next().unwrap_or("").trim().to_string();
     match name.as_str() {
         "help" | "?" | "h" => Command::Help,
         "clear" | "cls" | "c" => Command::Clear,
         "quit" | "exit" | "q" => Command::Quit,
         "new" => Command::New,
         "sessions" | "session" => Command::Sessions,
-        "model" | "m" => Command::Model,
+        // ponytail: arg is preserved so /model and /model X both work.
+        // Empty string means "no arg" — execute shows current.
+        "model" | "m" => {
+            if arg.is_empty() {
+                Command::Model(None)
+            } else {
+                Command::Model(Some(arg))
+            }
+        }
         other => Command::Unknown(other.to_string()),
     }
 }
@@ -145,19 +154,50 @@ pub async fn execute(cmd: Command, app: &mut AppState, client: &OpencodeClient) 
             });
             Outcome::Continue
         }
-        Command::Model => {
-            // For v0: read-only. Switching mid-session is not yet wired
-            // (requires either spawning a new session or a server-side
-            // model swap API).
-            let m = app
-                .default_model
-                .as_deref()
-                .unwrap_or("(none — server config has no default)");
-            app.messages.push(DisplayMessage {
-                role: Role::System,
-                text: format!("model: {m}"),
-            });
-            Outcome::Continue
+        Command::Model(arg) => {
+            // Two modes:
+            //   /model          → show current override + default
+            //   /model p/id     → validate and store as override
+            //
+            // Validation is intentionally light: opencode will reject
+            // a bad provider/model at request time, and the server's
+            // session.error event flips the status bar to Error. We
+            // only catch the obvious typo (missing slash).
+            match arg {
+                None => {
+                    let current = app
+                        .current_model_override
+                        .as_deref()
+                        .unwrap_or("(none — using server default)");
+                    let default = app
+                        .default_model
+                        .as_deref()
+                        .unwrap_or("(none — server config has no default)");
+                    app.messages.push(DisplayMessage {
+                        role: Role::System,
+                        text: format!("model:\n  override: {current}\n  default: {default}"),
+                    });
+                    Outcome::Continue
+                }
+                Some(spec) => {
+                    if !spec.contains('/') {
+                        app.messages.push(DisplayMessage {
+                            role: Role::System,
+                            text: format!(
+                                "bad model spec: {spec}\n  expected: provider/id (e.g. anthropic/claude-opus-4-5)"
+                            ),
+                        });
+                        return Outcome::Continue;
+                    }
+                    let trimmed = spec.trim().to_string();
+                    app.current_model_override = Some(trimmed.clone());
+                    app.messages.push(DisplayMessage {
+                        role: Role::System,
+                        text: format!("model → {trimmed}"),
+                    });
+                    Outcome::Continue
+                }
+            }
         }
     }
 }

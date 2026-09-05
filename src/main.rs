@@ -392,7 +392,19 @@ async fn handle_key(
             app.status = Status::Busy;
 
             // Fire-and-forget. Tokens stream back via SSE.
-            if let Err(e) = client.send_prompt(session_id, &text).await {
+            //
+            // If the user has a `/model` override set, include it in the
+            // per-prompt body so the next response uses that model. The
+            // override is purely client-side; the server stores which
+            // model answered in the assistant message metadata.
+            let model_override = app
+                .current_model_override
+                .as_deref()
+                .and_then(crate::client::ModelRef::parse);
+            if let Err(e) = client
+                .send_prompt(session_id, &text, model_override)
+                .await
+            {
                 app.status = Status::Error(format!("send: {e:#}"));
             }
         }

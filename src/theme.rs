@@ -44,6 +44,7 @@ pub const FG_FAINT: Color = palette::MUTED;
 pub const FG_BRIGHT: Color = palette::TEXT;
 
 pub const ACCENT: Color = palette::ACCENT;
+pub const PRIMARY: Color = palette::PRIMARY;
 pub const USER: Color = palette::PRIMARY;
 pub const ASSIST: Color = palette::TEXT;
 
