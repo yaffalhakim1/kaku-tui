@@ -1,85 +1,57 @@
 # kaku-tui
 
-A [ratatui](https://ratatui.rs) TUI client for [opencode](https://opencode.ai), styled after [kaku](https://kaku.fun): quiet, dark, single accent, generous spacing.
-
-![tui demo](https://placehold.co/640x240/1a1a1a/e0e0e0?text=coming+soon)
-
-## What it does
-
-- Connects to a running `opencode serve` (HTTP + SSE).
-- Sends prompts via `POST /session/:id/prompt_async`, streams tokens back via `GET /event`.
-- Renders the chat in a kaku-style frame: rounded borders, dim chrome, yellow accent.
-- Single keybind set: **Enter** sends, **Shift+Enter** newline, **Esc** aborts (or quits when idle), **Ctrl+C** quits.
+A [ratatui](https://ratatui.rs) client for [opencode](https://opencode.ai), styled after [kaku](https://kaku.fun).
 
 ## Run
 
 ```bash
-# 1. Start opencode in another terminal
-opencode serve
-
-# 2. (optional) auth — set this if your server has OPENCODE_SERVER_PASSWORD
-export OPENCODE_SERVER_PASSWORD=secret
-
-# 3. Build + run
+opencode serve &
 cargo run --release -- "http://127.0.0.1:4096"
+```
 
-# (or with auth)
+If your server runs behind a password:
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode serve &
 KAKU_TUI_PASSWORD=$OPENCODE_SERVER_PASSWORD cargo run --release -- "http://127.0.0.1:4096"
 ```
 
-The server URL and password are CLI arg + env var. No config file yet.
+Type, press Enter, watch the response stream in. Esc aborts. Esc on idle quits. Ctrl+C quits.
 
-## Smoke test
-
-Verify the SSE pipeline end-to-end without the TUI:
+## Try the SSE pipeline without the TUI
 
 ```bash
 KAKU_TUI_PASSWORD=$OPENCODE_SERVER_PASSWORD cargo run --example sse_smoke -- 4096
 ```
 
-You'll see ~30 events streamed in: `server.connected` → `message.part.updated` (with `delta`) → `session.idle`.
+Logs every event opencode emits: `server.connected`, then `message.part.updated` per token, then `session.idle`.
 
-## Architecture
+## How it hangs together
 
-Three concurrent sources in one async runtime:
+Three sources in `tokio::select!`:
 
-1. **Keyboard events** (crossterm `EventStream`).
-2. **SSE events** (a `tokio::spawn`-ed task on `/event`, bridged via `mpsc::unbounded_channel`).
-3. **A 500ms blink timer** for the streaming cursor.
+- keyboard events from crossterm
+- SSE frames from a `tokio::spawn`-ed task on `GET /event`, pushed through an `mpsc::unbounded_channel`
+- a 500 ms tick
 
-`tokio::select!` in `main.rs` races them. State lives in one `AppState` struct; UI is a pure `(&AppState, &mut TextArea) -> Frame` function.
+State lives in one `AppState` struct. The UI takes `&AppState` and renders. Server events and keypresses mutate `AppState` and re-render.
 
-```
-run loop: draw + select!{ keys, sse_channel, blink_tick }
-                            │
-                            ├─ keyboard → handle_key  → mutate AppState
-                            ├─ SSE       → apply_event → mutate AppState
-                            └─ tick       → toggle cursor_visible
-```
+## Colors
 
-## Visual rules
-
-In `src/theme.rs`:
-
-| Token | Color | Use |
+| Token | Value | Where |
 |---|---|---|
-| `FG` | `Color::Gray` | not pure white; kaku's softer text |
-| `FG_DIM` | `Color::DarkGray` | borders, meta text |
+| `FG` | `Gray` | body text |
+| `FG_DIM` | `DarkGray` | borders |
 | `FG_MUTE` | `Indexed(245)` | hint copy |
-| `ACCENT` | `Color::Yellow` | cursor, status highlights |
+| `ACCENT` | `Yellow` | cursor, status highlights |
 | `USER` | `Cyan` | user messages |
 | `ASSIST` | `White` | assistant messages |
 
-Borders are `BorderType::Rounded`, padding 1 cell, never more. No animations beyond the 500ms cursor blink.
+Rounded borders. One cell of padding. No animations.
 
-## Limitations (v0 scope)
+## What it doesn't do
 
-- One session, in-process, created on launch.
-- Plain text only — no markdown, no syntax highlighting.
-- SSE drop → status bar flips to `Error`; no auto-reconnect.
-- Light mode not supported (dark only).
-
-Each has a "trigger" in the design doc — see commits/discussions for when to add them.
+One session per launch. Plain text only. Dark theme only. SSE drop shows in the status bar; no auto-reconnect.
 
 ## License
 
