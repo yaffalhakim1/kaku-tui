@@ -17,12 +17,13 @@ pub struct OpencodeClient {
 }
 
 impl OpencodeClient {
-    pub fn new(base: Url, password: Option<&str>) -> Result<Self> {
+    pub fn new(base: Url, username: &str, password: Option<&str>) -> Result<Self> {
         let mut headers = HeaderMap::new();
         if let Some(pw) = password {
-            // ponytail: HTTP Basic per opencode contract. Username is always
-            // "opencode" unless OPENCODE_SERVER_USERNAME is set server-side.
-            let creds = format!("opencode:{pw}");
+            // ponytail: HTTP Basic per opencode contract. Server reads
+            // OPENCODE_SERVER_USERNAME; default is "opencode". We let the
+            // caller override so we can pick it up from the same env var.
+            let creds = format!("{username}:{pw}");
             let encoded = base64_encode(&creds);
             let val = HeaderValue::from_str(&format!("Basic {encoded}"))?;
             headers.insert(AUTHORIZATION, val);

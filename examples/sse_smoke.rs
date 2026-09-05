@@ -4,7 +4,7 @@
 //
 //   KAKU_TUI_PASSWORD=... cargo run --example sse_smoke -- <port>
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use futures_util::StreamExt;
 use kaku_tui_lib::client::OpencodeClient;
 
@@ -15,9 +15,13 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: sse_smoke <port>"))?
         .parse()?;
     let base: reqwest::Url = format!("http://127.0.0.1:{port}").parse()?;
-    let pw = std::env::var("KAKU_TUI_PASSWORD").ok();
+    // Same fallback as the binary: prefer KAKU_TUI_PASSWORD, else OPENCODE_SERVER_PASSWORD.
+    let pw = std::env::var("KAKU_TUI_PASSWORD")
+        .ok()
+        .or_else(|| std::env::var("OPENCODE_SERVER_PASSWORD").ok());
+    let user = std::env::var("OPENCODE_SERVER_USERNAME").unwrap_or_else(|_| "opencode".to_string());
 
-    let c = OpencodeClient::new(base, pw.as_deref())?;
+    let c = OpencodeClient::new(base, &user, pw.as_deref())?;
 
     // 1. Health.
     let h = c.health().await?;

@@ -9,12 +9,7 @@ opencode serve &
 cargo run --release -- "http://127.0.0.1:4096"
 ```
 
-If your server runs behind a password:
-
-```bash
-OPENCODE_SERVER_PASSWORD=secret opencode serve &
-KAKU_TUI_PASSWORD=$OPENCODE_SERVER_PASSWORD cargo run --release -- "http://127.0.0.1:4096"
-```
+If the server has `OPENCODE_SERVER_PASSWORD` set, kaku-tui picks it up automatically. To override, set `KAKU_TUI_PASSWORD` (preferred) or `OPENCODE_SERVER_USERNAME` for a non-default user.
 
 Type, press Enter, watch the response stream in. Esc aborts. Esc on idle quits. Ctrl+C quits.
 
@@ -28,11 +23,10 @@ Logs every event opencode emits: `server.connected`, then `message.part.updated`
 
 ## How it hangs together
 
-Three sources in `tokio::select!`:
+Two sources in `tokio::select!`:
 
 - keyboard events from crossterm
 - SSE frames from a `tokio::spawn`-ed task on `GET /event`, pushed through an `mpsc::unbounded_channel`
-- a 500 ms tick
 
 State lives in one `AppState` struct. The UI takes `&AppState` and renders. Server events and keypresses mutate `AppState` and re-render.
 

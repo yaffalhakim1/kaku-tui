@@ -37,7 +37,6 @@ pub struct AppState {
     pub status: Status,
     pub messages: Vec<DisplayMessage>,
     pub input: String,
-    pub cursor_visible: bool,
 
     // ── Phase 4 streaming fields ──
     /// part_id → accumulated text. Source of truth for the in-flight assistant message.
@@ -60,7 +59,6 @@ impl AppState {
             status: Status::Idle,
             messages: Vec::new(),
             input: String::new(),
-            cursor_visible: false,
             parts: HashMap::new(),
             part_to_message: HashMap::new(),
             streaming_message_index: None,

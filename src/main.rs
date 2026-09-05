@@ -19,7 +19,6 @@ mod ui;
 
 
 use std::panic;
-use std::time::Duration;
 
 use anyhow::{Context, Result};
 use crossterm::event::{Event as CtEvent, EventStream, KeyCode, KeyEvent, KeyModifiers};
@@ -27,7 +26,6 @@ use futures_util::StreamExt;
 use ratatui::backend::CrosstermBackend;
 use tui_textarea::{Input, TextArea};
 use tokio::sync::mpsc;
-use tokio::time::interval;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use app::{AppState, DisplayMessage, PartBuffer, Role, Status};
@@ -40,12 +38,19 @@ async fn main() -> Result<()> {
     let base = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "http://127.0.0.1:4096".to_string());
-    let password = std::env::var("KAKU_TUI_PASSWORD").ok();
+    // Auth: prefer the kaku-tui-specific var; fall back to the server's var
+    // so `OPENCODE_SERVER_PASSWORD=secret opencode serve &` followed by
+    // `cargo run` works without exporting twice.
+    let password = std::env::var("KAKU_TUI_PASSWORD")
+        .ok()
+        .or_else(|| std::env::var("OPENCODE_SERVER_PASSWORD").ok());
+    let username = std::env::var("OPENCODE_SERVER_USERNAME")
+        .unwrap_or_else(|_| "opencode".to_string());
     let url: reqwest::Url = base.parse().context("invalid base URL")?;
 
     // ── 2. Connect + open session BEFORE entering raw mode. ──
     // If opencode is down, we want a clean stdout error — not a corrupted terminal.
-    let client = OpencodeClient::new(url, password.as_deref())?;
+    let client = OpencodeClient::new(url, &username, password.as_deref())?;
     let _health = client.health().await.context("connect to opencode server")?;
     let session = client
         .create_session(Some("kaku-tui"))
@@ -91,6 +96,9 @@ enum StreamEvent {
     ServerConnected,
     SessionIdle { session_id: String },
     SessionError { message: String },
+    /// The SSE pipe died or closed. Surfaced so the status bar reflects it.
+    /// Triggered by either a bytes_stream error or a clean stream end.
+    Disconnected(String),
     PartUpdated {
         part_id: String,
         message_id: String,
@@ -140,8 +148,16 @@ fn spawn_sse_reader(client: OpencodeClient, tx: mpsc::UnboundedSender<StreamEven
         let mut stream = resp.bytes_stream();
         let mut buf: Vec<u8> = Vec::new();
 
-        while let Some(chunk) = stream.next().await {
-            let Ok(chunk) = chunk else { continue };
+        while let Some(next) = stream.next().await {
+            let chunk = match next {
+                Ok(c) => c,
+                Err(e) => {
+                    // ponytail: don't silently drop. Tell the user the SSE
+                    // pipe died so they don't think the TUI is hung.
+                    let _ = tx.send(StreamEvent::Disconnected(format!("sse: {e}")));
+                    return;
+                }
+            };
             buf.extend_from_slice(&chunk);
 
             // Drain complete events from the buffer.
@@ -165,6 +181,10 @@ fn spawn_sse_reader(client: OpencodeClient, tx: mpsc::UnboundedSender<StreamEven
                 }
             }
         }
+        // Stream closed cleanly. Tell the main loop so the status bar
+        // surfaces it; otherwise a quiet terminal looks the same as a
+        // crashed stream.
+        let _ = tx.send(StreamEvent::Disconnected("closed".to_string()));
     });
 }
 
@@ -249,16 +269,19 @@ fn find_subsequence(hay: &[u8], needle: &[u8]) -> Option<usize> {
 // =====================================================================
 // run — the main event loop.
 //
-// THREE sources of "stuff to react to":
+// TWO sources of "stuff to react to":
 //  1. Keyboard events (crossterm EventStream).
 //  2. SSE events (mpsc channel wrapped as a Stream).
-//  3. A 500ms blink tick (for streaming cursor).
 //
 // tokio::select! races them. We render FIRST, then wait.
 //  - Render-first guarantees a frame paints before we block on events.
 //  - Avoids blank flashes when the source is quiet.
 //
 // ALL state mutation lives here. The UI layer is read-only.
+//
+// ponytail: the textarea widget blinks its own cursor when it has focus,
+// so we don't need a 500ms tick for the input area. Streaming feedback
+// comes from `app.messages[idx].text` growing in real time.
 // =====================================================================
 async fn run(
     mut terminal: TerminalGuard,
@@ -269,9 +292,6 @@ async fn run(
 ) -> Result<()> {
     let mut events = EventStream::new();
     let mut textarea = ui_mod::chat::build_textarea();
-    let mut blink_on = true;
-    let mut blink_tick = interval(Duration::from_millis(500));
-    blink_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         terminal.0.draw(|f| ui_mod::draw(f, &app, &mut textarea))?;
@@ -286,14 +306,6 @@ async fn run(
             }
             Some(ev) = rx.next() => {
                 apply_event(&mut app, ev);
-            }
-            _ = blink_tick.tick() => {
-                if matches!(app.status, Status::Busy) {
-                    blink_on = !blink_on;
-                    app.cursor_visible = blink_on;
-                } else {
-                    app.cursor_visible = false;
-                }
             }
         }
     }
@@ -353,7 +365,6 @@ async fn handle_key(
             app.part_to_message.clear();
             app.last_user_text = Some(text.clone());
             app.status = Status::Busy;
-            app.cursor_visible = true;
 
             // Fire-and-forget. Tokens stream back via SSE.
             if let Err(e) = client.send_prompt(session_id, &text).await {
@@ -402,11 +413,19 @@ fn apply_event(app: &mut AppState, ev: StreamEvent) {
             app.streaming_message_index = None;
             app.last_user_text = None;
             app.parts.clear();
-            app.cursor_visible = false;
         }
         StreamEvent::SessionError { message } => {
             app.status = Status::Error(message);
             app.streaming_message_index = None;
+        }
+        StreamEvent::Disconnected(why) => {
+            // If a prompt was in flight, end it; otherwise just flag the connection.
+            // We don't blank `streaming_message_index` here — partial text stays
+            // visible, and the user gets a clear reason in the status bar.
+            if matches!(app.status, Status::Busy) {
+                app.status = Status::Error(format!("disconnected: {why}"));
+                app.streaming_message_index = None;
+            }
         }
         StreamEvent::PartUpdated { part_id, message_id, text, delta } => {
             // Map part_id → message_id on first sight.
