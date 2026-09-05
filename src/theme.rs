@@ -42,6 +42,7 @@ pub const BG: Color = palette::BG;
 pub const FG: Color = palette::FG;
 pub const FG_DIM: Color = palette::BG_EDGE;       // theme.border
 pub const FG_MUTE: Color = palette::FG_MUTED;     // theme.textMuted
+pub const FG_FAINT: Color = palette::FG_FAINT;    // theme.blockQuote / faint
 pub const FG_BRIGHT: Color = palette::FG_BRIGHT;  // theme.markdownHeading
 
 pub const ACCENT: Color = palette::BLUE;          // theme.accent

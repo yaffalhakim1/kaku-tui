@@ -52,6 +52,7 @@ async fn main() -> Result<()> {
     // If opencode is down, we want a clean stdout error — not a corrupted terminal.
     let client = OpencodeClient::new(url, &username, password.as_deref())?;
     let _health = client.health().await.context("connect to opencode server")?;
+    let default_model = client.default_model().await.unwrap_or(None);
     let session = client
         .create_session(Some("kaku-tui"))
         .await
@@ -59,6 +60,7 @@ async fn main() -> Result<()> {
 
     let mut app = AppState::new();
     app.session = Some(session.clone());
+    app.default_model = default_model;
     app.status = Status::Idle;
 
     // ── 3. Panic hook: restore terminal BEFORE printing the panic. ──

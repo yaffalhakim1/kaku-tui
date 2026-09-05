@@ -104,7 +104,37 @@ impl OpencodeClient {
         Ok(())
     }
 
-    /// POST /session/:id/abort — cancel an in-flight prompt.
+    /// GET /config/providers — returns { providers, default: { providerID: modelID } }.
+/// Pick the first entry in `default` and format as `providerID/modelID`.
+/// Used to label the top-left tag in the TUI.
+/// ponytail: we don't fetch the full provider catalog — we only need one label.
+pub async fn default_model(&self) -> Result<Option<String>> {
+    let url = self.base.join("/config/providers")?;
+    let resp = self
+        .http
+        .get(url)
+        .send()
+        .await
+        .context("GET /config/providers")?
+        .error_for_status()
+        .context("providers status")?;
+    let v: serde_json::Value = resp
+        .json()
+        .await
+        .context("decode providers")?;
+    let Some(defaults) = v.get("default").and_then(|d| d.as_object()) else {
+        return Ok(None);
+    };
+    if let Some((p, m_val)) = defaults.iter().next() {
+        if let Some(m) = m_val.as_str() {
+            return Ok(Some(format!("{p}/{m}")));
+        }
+    }
+    Ok(None)
+}
+
+
+/// POST /session/:id/abort — cancel an in-flight prompt.
     pub async fn abort(&self, session_id: &str) -> Result<()> {
         let url = self.base.join(&format!("/session/{session_id}/abort"))?;
         self.http

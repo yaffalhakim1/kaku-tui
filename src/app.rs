@@ -34,6 +34,9 @@ pub struct PartBuffer {
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub session: Option<Session>,
+    /// Default model from `/config/providers`, formatted `providerID/modelID`.
+    /// Shown in the top-left tag alongside the session title.
+    pub default_model: Option<String>,
     pub status: Status,
     pub messages: Vec<DisplayMessage>,
     pub input: String,
@@ -56,6 +59,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             session: None,
+            default_model: None,
             status: Status::Idle,
             messages: Vec::new(),
             input: String::new(),

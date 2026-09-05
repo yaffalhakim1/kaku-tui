@@ -1,9 +1,17 @@
 // ponytail: ui is pure. Takes &AppState (+ mut input), renders Frame. No I/O.
+//
+// kaku-style: no borders anywhere. Top row carries the model tag (left)
+// and the key-hint line (right). Below that is the message list, then the
+// input prompt line, then the status line.
 
 pub mod chat;
 pub mod status;
 
 use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
+use ratatui::widgets::Widget;
 use ratatui::Frame;
 
 use crate::app::AppState;
@@ -12,33 +20,55 @@ use tui_textarea::TextArea;
 
 /// Top-level dispatcher. Called from main loop on every tick + event.
 pub fn draw<'a>(f: &mut Frame<'_>, app: &AppState, ta: &mut TextArea<'a>) {
+    // Vertical layout:
+    //   [top tag line]       — 1 row, no chrome
+    //   [messages]           — fills the rest
+    //   [input prompt]       — 1 row
+    //   [status line]        — 1 row
+    //
+    // ponytail: 4 rows fixed at the bottom; messages get Min(1).
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),       // messages
-            Constraint::Length(3),    // input — 3 rows = border + 1 line + border
-            Constraint::Length(1),    // status
+            Constraint::Length(1), // top tag
+            Constraint::Min(1),    // messages
+            Constraint::Length(1), // input prompt
+            Constraint::Length(1), // status
         ])
         .split(f.area());
 
-    // Outer block: title at top spans full height. We give it only chunk[0] but
-    // extend by drawing through the chunks we actually own.
-    let title = match &app.session {
-        Some(s) => format!(" kaku-tui · {} ", s.title),
-        None => " kaku-tui ".to_string(),
-    };
-    let outer = theme::block(&title);
-    // ponytail: we don't render `outer` into the whole frame — instead render
-    // into each chunk's left edge via a Column-with-margins approach is overkill.
-    // Simpler: render outer over chunk[0] only, since the visual chrome lives there.
-    ratatui::widgets::Widget::render(outer, chunks[0], f.buffer_mut());
+    render_top_tag(f, chunks[0], app);
+    chat::render_messages(f, chunks[1], app);
+    chat::render_input(f, chunks[2], ta, "type your message and press enter to send…");
+    status::render(f, chunks[3], app);
+}
 
-    let inner = chunks[0].inner(ratatui::layout::Margin {
-        vertical: 1,
-        horizontal: 1,
-    });
-    chat::render_messages(f, inner, app);
+/// Top tag: model name on the left, key hints on the right, both dim.
+/// ponytail: a single row split horizontally. Min() for the left side
+/// pushes the right side to the actual right edge.
+fn render_top_tag(f: &mut Frame<'_>, area: ratatui::layout::Rect, app: &AppState) {
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(28),
+        ])
+        .split(area);
 
-    chat::render_input(f, chunks[1], ta);
-    status::render(f, chunks[2], app);
+    // Left: `kaku-tui · <model>`
+    let model = app.default_model.as_deref().unwrap_or("(no model)");
+    let left_text = Line::from(vec![
+        Span::styled(" kaku-tui ", Style::default().fg(theme::FG_MUTE)),
+        Span::styled("· ", Style::default().fg(theme::FG_FAINT)),
+        Span::styled(model, Style::default().fg(theme::FG)),
+    ]);
+    Paragraph::new(left_text).render(cols[0], f.buffer_mut());
+
+    // Right: key hints
+    let right = Paragraph::new(Line::from(Span::styled(
+        "esc:quit  ⌘k palette",
+        Style::default().fg(theme::FG_MUTE),
+    )))
+    .alignment(ratatui::layout::Alignment::Right);
+    right.render(cols[1], f.buffer_mut());
 }
