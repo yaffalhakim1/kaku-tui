@@ -1,5 +1,6 @@
-// kaku-style: status is a single dim line at the very bottom. No border,
-// no chrome. Just one short state label on the left, key hints on the right.
+// kaku-style status bar: 3 segments left-to-right — state · stats · hints.
+// Matches Claude Code's `Context 0% | Sh: 10% (1k57o)` style of dense
+// meta info packed into the bottom row.
 
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
@@ -11,26 +12,42 @@ use crate::app::{AppState, Status};
 use crate::theme;
 
 pub fn render(f: &mut Frame<'_>, area: Rect, app: &AppState) {
+    // Three segments: state (left) · stats (middle) · hints (right).
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(28)])
+        .constraints([
+            Constraint::Length(20), // state token
+            Constraint::Min(1),    // stats (token counts, etc.)
+            Constraint::Length(28), // hints
+        ])
         .split(area);
 
-    // Left: one short token describing current state.
-    let (label, color) = match &app.status {
+    // ── State token ──
+    let (state_text, state_color) = match &app.status {
         Status::Idle if app.abort_requested => ("aborted", theme::ACCENT),
-        Status::Idle => ("ready", theme::SUCCESS),
+        Status::Idle => ("● ready", theme::SUCCESS),
         Status::Busy => ("● streaming", theme::ACCENT),
         Status::Error(msg) => (msg.as_str(), theme::ERROR),
     };
-    // Bullet (●) gives Busy a tiny visual cue without being noisy.
     Paragraph::new(Line::from(Span::styled(
-        format!(" {label}"),
-        Style::default().fg(color),
+        format!(" {state_text}"),
+        Style::default().fg(state_color),
     )))
     .render(cols[0], f.buffer_mut());
 
-    // Right: context-aware key hints, right-aligned.
+    // ── Stats — only meaningful when we have session info. v0 has nothing
+    //    to report beyond session id, so show session id shortened. ponytail:
+    //    when we wire token counts from the SSE event, surface them here.
+    let stats = stats_line(app);
+    if !stats.is_empty() {
+        Paragraph::new(Line::from(Span::styled(
+            stats,
+            Style::default().fg(theme::FG_MUTE),
+        )))
+        .render(cols[1], f.buffer_mut());
+    }
+
+    // ── Hints ──
     let hint = match &app.status {
         Status::Busy => " esc:abort ",
         _ => " esc:quit ",
@@ -40,5 +57,18 @@ pub fn render(f: &mut Frame<'_>, area: Rect, app: &AppState) {
         Style::default().fg(theme::FG_MUTE),
     )))
     .alignment(Alignment::Right)
-    .render(cols[1], f.buffer_mut());
+    .render(cols[2], f.buffer_mut());
+}
+
+/// Cheap stats summary for the status bar.
+/// ponytail: extend this when we wire token counts.
+fn stats_line(app: &AppState) -> String {
+    let Some(s) = &app.session else {
+        return String::new();
+    };
+    // Show short session id (last 8 chars). Real token counts come from
+    // a future wire-up of part metadata.
+    let id = s.id.strip_prefix("ses_").unwrap_or(&s.id);
+    let tail = &id[id.len().saturating_sub(8)..];
+    format!("session:{tail}")
 }
